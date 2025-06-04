@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تلاجة الحاج أنور بكر - صفحة الإدخال</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <button class="menu-toggle" aria-label="Toggle menu">
+    <i class="fas fa-bars"></i>
+</button>
+        <div class="logo-container">
+            <h1>تلاجة الحاج أنور بكر</h1>
+        </div>
+        
+    </header>
+
+    <nav class="sidebar">
+        <ul>
+            <li>
+                <a href="index.html">
+                    <i class="fas fa-home"></i>
+                    <span>الرئيسية</span>
+                </a>
+            </li>
+            <li>
+                <a href="add-rooms.html">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>إضافة العنابر</span>
+                </a>
+            </li>
+            <li>
+                <a href="clients.html">
+                    <i class="fas fa-users"></i>
+                    <span>العملاء</span>
+                </a>
+            </li>
+            <li class="active">
+                <a href="entry.html">
+                    <i class="fas fa-edit"></i>
+                    <span>صفحة الإدخال</span>
+                </a>
+            </li>
+            <li>
+                <a href="rooms-status.html">
+                    <i class="fas fa-box-open"></i>
+                    <span>العنابر المتاحة</span>
+                </a>
+            </li>
+            <li>
+                <a href="report.html">
+                    <i class="fas fa-file-alt"></i>
+                    <span>كشف العنابر</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <div class="form-container">
+            <h2><i class="fas fa-edit"></i> إدخال بيانات التخزين</h2>
+            
+            <form id="entry-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="bags-count">عدد الشكاير:</label>
+                        <input type="number" id="bags-count" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="weight">الوزن بالطن:</label>
+                        <input type="number" step="0.01" id="weight" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="client">اسم العميل:</label>
+                    <select id="client" required>
+                        <option value="">اختر العميل</option>
+                        <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="room">اسم العنبر:</label>
+                    <select id="room" required>
+                        <option value="">اختر العنبر</option>
+                        <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="thread-color">لون الخيط:</label>
+                    <input type="text" id="thread-color">
+                </div>
+                
+                <div class="form-group">
+                    <label for="notes">ملاحظات:</label>
+                    <textarea id="notes" rows="3"></textarea>
+                </div>
+                
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> حفظ الإدخال
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/script.js"></script>
+    <script src="js/entry.js"></script>
+</body>
+</html>

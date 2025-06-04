@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تلاجة الحاج أنور بكر - العملاء</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <button class="menu-toggle" aria-label="Toggle menu">
+    <i class="fas fa-bars"></i>
+</button>
+        <div class="logo-container">
+            <h1>تلاجة الحاج أنور بكر</h1>
+        </div>
+        
+    </header>
+
+    <nav class="sidebar">
+        <ul>
+            <li>
+                <a href="index.html">
+                    <i class="fas fa-home"></i>
+                    <span>الرئيسية</span>
+                </a>
+            </li>
+            <li>
+                <a href="add-rooms.html">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>إضافة العنابر</span>
+                </a>
+            </li>
+            <li class="active">
+                <a href="clients.html">
+                    <i class="fas fa-users"></i>
+                    <span>العملاء</span>
+                </a>
+            </li>
+            <li>
+                <a href="entry.html">
+                    <i class="fas fa-edit"></i>
+                    <span>صفحة الإدخال</span>
+                </a>
+            </li>
+            <li>
+                <a href="rooms-status.html">
+                    <i class="fas fa-box-open"></i>
+                    <span>العنابر المتاحة</span>
+                </a>
+            </li>
+            <li>
+                <a href="report.html">
+                    <i class="fas fa-file-alt"></i>
+                    <span>كشف العنابر</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <div class="table-container">
+            <div class="table-header">
+                <h2><i class="fas fa-users"></i> إدارة العملاء</h2>
+                <button id="add-client-btn" class="btn-primary">
+                    <i class="fas fa-plus"></i> عميل جديد
+                </button>
+            </div>
+
+            <div id="client-form-container" class="form-container" style="display: none;">
+                <form id="client-form">
+                    <div class="form-group">
+                        <label for="client-name">اسم العميل:</label>
+                        <input type="text" id="client-name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone1">رقم التليفون 1:</label>
+                        <input type="tel" id="phone1" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone2">رقم التليفون 2:</label>
+                        <input type="tel" id="phone2">
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> حفظ العميل
+                    </button>
+                    <button type="button" id="cancel-client-btn" class="btn-secondary">
+                        <i class="fas fa-times"></i> إلغاء
+                    </button>
+                </form>
+            </div>
+
+            <table id="clients-table">
+                <thead>
+                    <tr>
+                        <th>اسم العميل</th>
+                        <th>رقم التليفون 1</th>
+                        <th>رقم التليفون 2</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/script.js"></script>
+    <script src="js/clients.js"></script>
+</body>
+</html>
