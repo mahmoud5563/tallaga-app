@@ -637,3 +637,110 @@ table tbody tr:last-child td {
         justify-content: flex-end; /* Align h1 to the right within logo container */
     }
 }
+
+/* Rooms Status Page specific styles */
+.room-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Distribute space vertically */
+    align-items: center;
+    text-align: center;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    cursor: default; /* Change cursor back to default */
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border: 2px solid var(--border-color); /* Add a border for default */
+    position: relative; /* For button positioning */
+}
+
+.room-card.available {
+    border-color: var(--available-color);
+}
+
+.room-card.occupied {
+    border-color: var(--occupied-color);
+}
+
+.room-card h3 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    font-size: 1.4rem;
+}
+
+.room-card p {
+    margin: 0.3rem 0;
+    color: var(--dark-gray);
+    font-size: 1rem;
+}
+
+/* Specific styling for the status text if needed, though now replaced by button */
+/* .room-card .status {
+    font-weight: bold;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    display: inline-block;
+    margin-top: 0.5rem;
+}
+
+.room-card.available .status {
+    background-color: var(--available-color);
+    color: white;
+}
+
+.room-card.occupied .status {
+    background-color: var(--occupied-color);
+    color: white;
+} */
+
+.toggle-status-btn {
+    margin-top: 1rem;
+    padding: 0.6rem 1rem;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.3s ease;
+    display: flex; /* To align icon and text */
+    align-items: center;
+    gap: 5px; /* Space between icon and text */
+}
+
+.btn-success {
+    background-color: var(--available-color); /* Green for "تحديد كمشغول" */
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #21a65f; /* Darker green */
+}
+
+.btn-danger {
+    background-color: var(--occupied-color); /* Red for "تحديد كمتاح" */
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b; /* Darker red */
+}
+
+/* Filters layout improvement (optional) */
+.filters {
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    gap: 15px; /* Space between filter groups */
+    margin-bottom: 1.5rem;
+    background-color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    align-items: flex-end; /* Align inputs/selects at the bottom */
+}
+
+.filters .form-group {
+    flex: 1; /* Allow items to grow */
+    min-width: 150px; /* Minimum width before wrapping */
+    margin-bottom: 0; /* Remove default margin */
+}

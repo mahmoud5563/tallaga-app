@@ -10,10 +10,11 @@
 </head>
 <body>
     <header class="app-header">
-    <button class="menu-toggle">☰</button> <div class="logo-container">
-        <h1>تلاجة الحاج أنور بكر</h1>
-    </div>
-</header>
+        <button class="menu-toggle">☰</button> 
+        <div class="logo-container">
+            <h1>تلاجة الحاج أنور بكر</h1>
+        </div>
+    </header>
 
     <nav class="sidebar">
         <ul>
@@ -53,6 +54,13 @@
                     <span>كشف العنابر</span>
                 </a>
             </li>
+            
+            <li>
+                <a href="#" id="clear-data-btn">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>مسح البيانات</span>
+                </a>
+            </li>
         </ul>
     </nav>
 
@@ -60,14 +68,14 @@
         <div class="table-container">
             <div class="table-header">
                 <h2><i class="fas fa-users"></i> إدارة العملاء</h2>
-                <button id="add-client-btn" class="btn-primary">
+                <button id="show-add-client-form-btn" class="btn-primary">
                     <i class="fas fa-plus"></i> عميل جديد
                 </button>
             </div>
 
             <div id="client-form-container" class="form-container" style="display: none;">
-                <form id="client-form">
-                    <div class="form-group">
+                <h3 id="client-form-title"><i class="fas fa-user-plus"></i> إضافة عميل جديد</h3> 
+                <form id="add-client-form"> <div class="form-group">
                         <label for="client-name">اسم العميل:</label>
                         <input type="text" id="client-name" required>
                     </div>
@@ -82,7 +90,7 @@
                         <input type="tel" id="phone2">
                     </div>
                     
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" id="save-client-btn" class="btn-primary">
                         <i class="fas fa-save"></i> حفظ العميل
                     </button>
                     <button type="button" id="cancel-client-btn" class="btn-secondary">
@@ -101,13 +109,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
-                </tbody>
+                    </tbody>
             </table>
         </div>
     </div>
 
     <script src="js/script.js"></script>
-    <script src="js/clients.js"></script>
-</body>
+    </body>
 </html>

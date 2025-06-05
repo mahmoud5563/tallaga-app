@@ -8,6 +8,7 @@
  * 5. تقسيم العنابر إلى لواطات
  * 6. السايدبار المتجاوب
  * 7. مسح البيانات
+ * 8. التحكم اليدوي في حالة العنبر (متاح/مشغول)
  */
 
 // ==================== فئة مساعدة للتخزين المحلي ====================
@@ -15,10 +16,16 @@ class StorageHelper {
     static get(key) {
         const data = localStorage.getItem(key);
         if (data) {
-            return JSON.parse(data);
+            try {
+                return JSON.parse(data);
+            } catch (e) {
+                console.error(`Error parsing localStorage key "${key}":`, e);
+                // ارجع قيمة افتراضية في حالة وجود خطأ في تحليل البيانات
+                return key === 'roomLots' ? {} : [];
+            }
         }
         // قيم افتراضية مختلفة حسب نوع البيانات
-        return key === 'roomLots' ? {} : []; // rooms and clients are arrays, roomLots is an object
+        return key === 'roomLots' ? {} : [];
     }
 
     static set(key, value) {
@@ -44,6 +51,7 @@ function initializeStorage() {
     if (!localStorage.getItem('entries')) {
         StorageHelper.set('entries', []);
     }
+    // تهيئة roomLots إذا لم تكن موجودة، لتجنب الأخطاء
     if (!localStorage.getItem('roomLots')) {
         StorageHelper.set('roomLots', {});
     }
@@ -53,20 +61,17 @@ function initializeStorage() {
 function setupMobileMenu() {
     const sidebar = document.querySelector('.sidebar');
     const menuToggle = document.querySelector('.menu-toggle');
-    const mainContent = document.querySelector('.main-content'); // Get the main content element
+    const mainContent = document.querySelector('.main-content');
 
     if (menuToggle) {
         menuToggle.addEventListener('click', () => {
             sidebar.classList.toggle('open');
-            // Add or remove the 'pushed' class from main-content
             if (mainContent) {
                 mainContent.classList.toggle('pushed');
             }
         });
 
-        // Close sidebar when clicking outside it or on a link (for better mobile experience)
         document.addEventListener('click', (event) => {
-            // If sidebar is open AND click is NOT on sidebar AND click is NOT on menuToggle
             if (sidebar.classList.contains('open') &&
                 !sidebar.contains(event.target) &&
                 !menuToggle.contains(event.target)) {
@@ -77,7 +82,7 @@ function setupMobileMenu() {
             }
         });
 
-        // Close sidebar when clicking on any link inside it
+        // إغلاق السايدبار عند النقر على رابط (لتحسين تجربة الموبايل)
         sidebar.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', () => {
                 if (sidebar.classList.contains('open')) {
@@ -93,11 +98,11 @@ function setupMobileMenu() {
 
 // ==================== تمييز العنصر النشط في السايدبار ====================
 function highlightActiveLink() {
-    const currentPath = window.location.pathname.split('/').pop(); // Get current file name
+    const currentPath = window.location.pathname.split('/').pop();
     const sidebarLinks = document.querySelectorAll('.sidebar ul li a');
 
     sidebarLinks.forEach(link => {
-        const linkPath = link.getAttribute('href');
+        const linkPath = link.getAttribute('href').split('/').pop(); // تأكد من مقارنة اسم الملف فقط
         if (linkPath === currentPath) {
             link.closest('li').classList.add('active');
         } else {
@@ -124,7 +129,7 @@ function renderDashboardStats() {
 
     if (todayEntriesSpan) {
         const entries = StorageHelper.get('entries');
-        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const today = new Date().toISOString().slice(0, 10);
         const todayCount = entries.filter(entry => entry.date === today).length;
         todayEntriesSpan.textContent = todayCount;
     }
@@ -145,21 +150,174 @@ function setupAddRoomForm() {
             }
 
             const rooms = StorageHelper.get('rooms');
+            // تحقق من عدم وجود عنبر بنفس الاسم والدور بالفعل (اختياري)
+            if (rooms.some(room => room.name === roomName && room.floor === floor)) {
+                alert('يوجد عنبر بنفس الاسم والدور بالفعل.');
+                return;
+            }
+
             const newRoom = {
-                id: Date.now().toString(), // Unique ID
+                id: Date.now().toString(), // معرف فريد للعنبر
                 name: roomName,
                 floor: floor,
-                capacity: 0, // Initial capacity (bags)
-                status: 'available' // available or occupied
+                capacity: 0, // السعة التلقائية (عدد الشكاير) من الإدخالات
+                totalWeight: 0, // الوزن الكلي التلقائي من الإدخالات
+                status: 'available', // الحالة التلقائية (تعتمد على capacity)
+                manualStatus: 'available' // الحالة اليدوية: متاح أو مشغول، ولها الأولوية في العرض
             };
             rooms.push(newRoom);
             StorageHelper.set('rooms', rooms);
 
             alert('تم إضافة العنبر بنجاح!');
             addRoomForm.reset();
+            renderDashboardStats(); // تحديث إحصائيات لوحة التحكم
+
+            // تحديث عرض العنابر في صفحة حالة العنابر إذا كانت مرئية
+            if (document.getElementById('rooms-grid')) {
+                renderRoomsStatusGrid();
+            }
+            // تحديث عرض العنابر في جدول صفحة إضافة العنابر
+            renderAddRoomsTable();
+
+            // تحديث قوائم اختيار العنبر في صفحات الإدخال والتقارير إذا كانت موجودة
+            populateEntryFormDropdowns();
+            renderReportTable();
+            renderRoomsList(); // إذا كنت تستخدم صفحة تقسيم العنابر
         });
     }
 }
+
+// دالة لعرض العنابر في جدول صفحة إضافة العنابر
+function renderAddRoomsTable() {
+    const roomsTableBody = document.querySelector('#rooms-table tbody');
+    if (!roomsTableBody) return;
+
+    roomsTableBody.innerHTML = '';
+    const rooms = StorageHelper.get('rooms');
+
+    if (rooms.length === 0) {
+        roomsTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center;">لا توجد عنابر مضافة بعد.</td></tr>';
+        return;
+    }
+
+    rooms.forEach(room => {
+        const row = roomsTableBody.insertRow();
+        row.insertCell().textContent = room.name;
+        row.insertCell().textContent = `الدور ${room.floor}`;
+
+        const actionsCell = row.insertCell();
+        const editButton = document.createElement('button');
+        editButton.innerHTML = '<i class="fas fa-edit"></i> تعديل';
+        editButton.classList.add('btn-primary', 'btn-small');
+        editButton.onclick = () => openEditRoomModal(room.id);
+        actionsCell.appendChild(editButton);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.innerHTML = '<i class="fas fa-trash"></i> حذف';
+        deleteButton.classList.add('btn-danger', 'btn-small');
+        deleteButton.onclick = () => deleteRoom(room.id);
+        actionsCell.appendChild(deleteButton);
+    });
+}
+
+function openEditRoomModal(roomId) {
+    const roomToEdit = StorageHelper.get('rooms').find(room => room.id === roomId);
+    if (!roomToEdit) {
+        alert('العنبر غير موجود.');
+        return;
+    }
+
+    const modal = document.getElementById('edit-room-modal');
+    const editRoomNameInput = document.getElementById('edit-room-name');
+    const editFloorSelect = document.getElementById('edit-floor');
+    const editRoomIdInput = document.getElementById('edit-room-id');
+
+    editRoomNameInput.value = roomToEdit.name;
+    editFloorSelect.value = roomToEdit.floor;
+    editRoomIdInput.value = roomToEdit.id; // لتخزين معرف العنبر الذي يتم تعديله
+
+    modal.style.display = 'flex'; // إظهار المودال
+
+    // إزالة أي مستمعي أحداث سابقين لتجنب التكرار
+    const editRoomForm = document.getElementById('edit-room-form');
+    // لكي نضمن إزالة المستمعين القدامى، من الأفضل استخدام دالة مسماة أو cloneNode(true)
+    // هنا، سنعيد تعيين onsubmit و onclick فقط
+    editRoomForm.onsubmit = null;
+    document.getElementById('cancel-edit-room-btn').onclick = null;
+
+
+    // إضافة مستمع حدث الحفظ للمودال
+    editRoomForm.onsubmit = function(e) {
+        e.preventDefault();
+        
+        const updatedRoomName = editRoomNameInput.value.trim();
+        const updatedFloor = editFloorSelect.value;
+        const roomIdToUpdate = editRoomIdInput.value;
+
+        if (!updatedRoomName) {
+            alert('الرجاء إدخال اسم العنبر.');
+            return;
+        }
+
+        // التحقق من عدم وجود عنبر آخر بنفس الاسم والدور (باستثناء العنبر الذي يتم تعديله)
+        const rooms = StorageHelper.get('rooms');
+        if (rooms.some(room => room.name === updatedRoomName && room.floor === updatedFloor && room.id !== roomIdToUpdate)) {
+            alert('يوجد عنبر آخر بنفس الاسم والدور بالفعل.');
+            return;
+        }
+
+        StorageHelper.update('rooms', (rooms) =>
+            rooms.map(room =>
+                room.id === roomIdToUpdate ? { ...room, name: updatedRoomName, floor: updatedFloor } : room
+            )
+        );
+
+        modal.style.display = 'none'; // إخفاء المودال
+        alert('تم تحديث العنبر بنجاح!');
+        renderAddRoomsTable(); // تحديث عرض الجدول في صفحة إضافة العنابر
+        if (document.getElementById('rooms-grid')) {
+            renderRoomsStatusGrid(); // تحديث عرض العنابر في صفحة حالة العنابر
+        }
+        populateEntryFormDropdowns(); // تحديث قوائم العنبر في صفحات أخرى
+        renderReportTable();
+        renderRoomsList(); // لتحديث قائمة العنابر في تقسيم اللواطات
+    };
+
+    // إضافة مستمع حدث الإلغاء للمودال
+    document.getElementById('cancel-edit-room-btn').onclick = () => {
+        modal.style.display = 'none'; // إخفاء المودال
+    };
+}
+
+
+function deleteRoom(roomId) {
+    if (confirm('هل أنت متأكد أنك تريد حذف هذا العنبر؟ سيتم حذف جميع إدخالاته المتعلقة به.')) {
+        // حذف العنبر نفسه
+        StorageHelper.update('rooms', (rooms) => rooms.filter(room => room.id !== roomId));
+
+        // حذف الإدخالات المتعلقة بهذا العنبر
+        StorageHelper.update('entries', (entries) => entries.filter(entry => entry.roomId !== roomId));
+
+        // حذف اللواطات المتعلقة بهذا العنبر (إذا كنت تستخدمها)
+        StorageHelper.update('roomLots', (roomLots) => {
+            const newRoomLots = { ...roomLots };
+            delete newRoomLots[roomId];
+            return newRoomLots;
+        });
+
+
+        alert('تم حذف العنبر وجميع إدخالاته ولواطاته بنجاح!');
+        renderAddRoomsTable(); // تحديث عرض الجدول في صفحة إضافة العنابر
+        renderDashboardStats(); // تحديث إحصائيات لوحة التحكم
+        if (document.getElementById('rooms-grid')) {
+            renderRoomsStatusGrid(); // تحديث عرض العنابر في صفحة حالة العنابر
+        }
+        populateEntryFormDropdowns(); // تحديث قوائم العنبر في صفحات أخرى
+        renderReportTable();
+        renderRoomsList(); // لتحديث قائمة العنابر في تقسيم اللواطات
+    }
+}
+
 
 // ==================== وظائف العملاء (clients.html) ====================
 function renderClientsTable() {
@@ -200,7 +358,7 @@ function setupAddClientForm() {
         showAddClientFormBtn.addEventListener('click', () => {
             clientFormContainer.style.display = 'block';
             addClientForm.reset();
-            addClientForm.dataset.editing = 'false'; // Reset editing state
+            addClientForm.dataset.editing = 'false';
             document.getElementById('client-form-title').textContent = 'إضافة عميل جديد';
             document.getElementById('save-client-btn').innerHTML = '<i class="fas fa-save"></i> حفظ العميل';
         });
@@ -226,6 +384,14 @@ function setupAddClientForm() {
                 return;
             }
 
+            // التحقق من تكرار رقم التليفون 1 (اختياري)
+            const clients = StorageHelper.get('clients');
+            if (clients.some(c => c.phone1 === phone1 && c.id !== clientId)) {
+                alert('يوجد عميل آخر مسجل بنفس رقم التليفون 1.');
+                return;
+            }
+
+
             if (isEditing) {
                 StorageHelper.update('clients', (clients) =>
                     clients.map(c => c.id === clientId ? { ...c, name, phone1, phone2 } : c)
@@ -247,6 +413,9 @@ function setupAddClientForm() {
 
             clientFormContainer.style.display = 'none';
             renderClientsTable();
+            renderDashboardStats();
+            populateEntryFormDropdowns(); // تحديث قائمة العملاء في صفحة الإدخال
+            renderReportTable(); // تحديث قائمة العملاء في صفحة التقارير
         });
     }
 }
@@ -275,14 +444,29 @@ function openEditClientModal(clientId) {
 }
 
 function deleteClient(clientId) {
-    if (confirm('هل أنت متأكد أنك تريد حذف هذا العميل؟')) {
+    if (confirm('هل أنت متأكد أنك تريد حذف هذا العميل؟ سيتم حذف جميع إدخالاته المتعلقة بالعنابر.')) {
         StorageHelper.update('clients', (clients) => clients.filter(c => c.id !== clientId));
-        // Optionally, check if any entries are linked to this client and warn/delete them
-        alert('تم حذف العميل بنجاح!');
+
+        // حذف الإدخالات المتعلقة بهذا العميل
+        const entries = StorageHelper.get('entries');
+        const affectedRooms = new Set(); // لتتبع العنابر التي تأثرت لحساب سعتها لاحقًا
+        entries.filter(entry => entry.clientId === clientId).forEach(entry => affectedRooms.add(entry.roomId));
+
+        StorageHelper.update('entries', (entries) => entries.filter(entry => entry.clientId !== clientId));
+
+        // إعادة حساب سعة العنابر المتأثرة
+        affectedRooms.forEach(roomId => updateRoomCapacity(roomId));
+
+        alert('تم حذف العميل وجميع إدخالاته بنجاح!');
         renderClientsTable();
+        renderDashboardStats();
+        populateEntryFormDropdowns(); // تحديث قوائم العملاء في صفحات أخرى
+        renderReportTable();
+        if (document.getElementById('rooms-grid')) {
+            renderRoomsStatusGrid(); // تحديث عرض حالة العنابر
+        }
     }
 }
-
 
 // ==================== وظائف الإدخال (entry.html) ====================
 function populateEntryFormDropdowns() {
@@ -304,13 +488,12 @@ function populateEntryFormDropdowns() {
         const rooms = StorageHelper.get('rooms');
         roomSelect.innerHTML = '<option value="">اختر العنبر</option>';
         rooms.forEach(room => {
-            // Only show available rooms for new entries
-            if (room.status === 'available' || room.id === roomSelect.dataset.selectedRoomId) { // Allow editing if room is already selected
-                const option = document.createElement('option');
-                option.value = room.id;
-                option.textContent = `${room.name} (الدور ${room.floor})`;
-                roomSelect.appendChild(option);
-            }
+            const option = document.createElement('option');
+            option.value = room.id;
+            // يمكن إضافة الحالة التلقائية أو اليدوية للعنبر هنا للمساعدة في الاختيار
+            const displayStatus = room.manualStatus || room.status;
+            option.textContent = `${room.name} (الدور ${room.floor}) - (${displayStatus === 'available' ? 'متاح' : 'مشغول'})`;
+            roomSelect.appendChild(option);
         });
     }
 }
@@ -322,7 +505,7 @@ function setupEntryForm() {
             e.preventDefault();
 
             const date = document.getElementById('entry-date').value;
-            const bags = parseInt(document.getElementById('bags').value);
+            const bags = parseInt(document.getElementById('number-of-bags').value);
             const weight = parseFloat(document.getElementById('weight').value);
             const clientId = document.getElementById('client').value;
             const roomId = document.getElementById('room').value;
@@ -362,27 +545,17 @@ function setupEntryForm() {
                 return entries;
             });
 
-            // Update room status to 'occupied' and capacity
-            StorageHelper.update('rooms', (rooms) => {
-                return rooms.map(room => {
-                    if (room.id === roomId) {
-                        const currentLots = StorageHelper.get('roomLots')[roomId] || [];
-                        const currentRoomBags = currentLots.reduce((sum, lot) => sum + lot.bags, 0);
-                        const newCapacity = currentRoomBags + bags;
-
-                        return {
-                            ...room,
-                            status: 'occupied',
-                            capacity: newCapacity // Sum of bags from entries + existing lots
-                        };
-                    }
-                    return room;
-                });
-            });
+            // تحديث سعة العنبر والوزن الكلي (تلقائياً)
+            updateRoomCapacity(roomId);
 
             alert('تم حفظ الإدخال بنجاح!');
             entryForm.reset();
-            populateEntryFormDropdowns(); // Re-populate to reflect updated room statuses
+            populateEntryFormDropdowns();
+            renderDashboardStats();
+            renderReportTable();
+            if (document.getElementById('rooms-grid')) {
+                renderRoomsStatusGrid(); // تحديث عرض حالة العنابر
+            }
         });
     }
 }
@@ -397,13 +570,13 @@ function renderReportTable() {
     const totalBagsSpan = document.getElementById('total-bags');
     const totalWeightSpan = document.getElementById('total-weight');
 
-    if (!reportTableBody) return; // Exit if not on report page
+    if (!reportTableBody) return;
 
     const entries = StorageHelper.get('entries');
     const rooms = StorageHelper.get('rooms');
     const clients = StorageHelper.get('clients');
 
-    // Populate filter dropdowns if on report page
+    // ملء فلاتر العنابر والعملاء
     if (filterRoomSelect) {
         filterRoomSelect.innerHTML = '<option value="">كل العنابر</option>';
         rooms.forEach(room => {
@@ -424,7 +597,6 @@ function renderReportTable() {
         });
     }
 
-    // Filter function
     const applyFilters = () => {
         reportTableBody.innerHTML = '';
         let filteredEntries = entries;
@@ -450,17 +622,21 @@ function renderReportTable() {
         let currentTotalBags = 0;
         let currentTotalWeight = 0;
 
+        // فرز الإدخالات حسب التاريخ (أحدث أولاً)
+        filteredEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
         filteredEntries.forEach(entry => {
             const row = reportTableBody.insertRow();
             row.insertCell().textContent = entry.date;
             row.insertCell().textContent = entry.clientName;
             row.insertCell().textContent = entry.roomName;
             row.insertCell().textContent = entry.bags;
-            row.insertCell().textContent = entry.weight.toFixed(2); // Format weight
+            row.insertCell().textContent = entry.weight.toFixed(2);
             row.insertCell().textContent = entry.threadColor || 'لا يوجد';
             row.insertCell().textContent = entry.notes || 'لا يوجد';
 
             const actionsCell = row.insertCell();
+            actionsCell.classList.add('actions-cell'); // أضف كلاس لتسهيل إخفائها للطباعة
             const editButton = document.createElement('button');
             editButton.innerHTML = '<i class="fas fa-edit"></i> تعديل';
             editButton.classList.add('btn-primary', 'btn-small');
@@ -481,24 +657,33 @@ function renderReportTable() {
         if (totalWeightSpan) totalWeightSpan.textContent = currentTotalWeight.toFixed(2);
     };
 
-    // Attach event listeners for filters
     if (document.getElementById('apply-filters-btn')) {
         document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
     }
-    // Initial render
-    applyFilters();
+    applyFilters(); // تطبيق الفلاتر عند تحميل الصفحة لأول مرة
 
-    // Setup Print Button
     const printBtn = document.getElementById('print-btn');
     if (printBtn) {
         printBtn.addEventListener('click', () => {
-            const printContents = document.querySelector('.form-container').innerHTML; // Or the table itself
-            const originalContents = document.body.innerHTML;
+            // إخفاء الأزرار والإجراءات غير الضرورية للطباعة
+            const originalActions = document.querySelectorAll('#report-table .actions-cell, #report-table .btn-primary, #report-table .btn-danger');
+            originalActions.forEach(el => el.style.display = 'none');
+            const originalFilters = document.querySelector('.filters');
+            if (originalFilters) originalFilters.style.display = 'none';
+            const originalPrintBtn = document.getElementById('print-btn');
+            if (originalPrintBtn) originalPrintBtn.style.display = 'none';
+            const originalSummary = document.querySelector('.report-summary');
+            if (originalSummary) originalSummary.style.display = 'none';
 
-            document.body.innerHTML = printContents; // Temporarily change body for printing
-            window.print(); // Print
-            document.body.innerHTML = originalContents; // Restore original content
-            location.reload(); // Reload to re-attach event listeners etc.
+
+            window.print(); // طباعة الصفحة
+
+            // إعادة إظهار العناصر بعد الطباعة
+            originalActions.forEach(el => el.style.display = '');
+            if (originalFilters) originalFilters.style.display = '';
+            if (originalPrintBtn) originalPrintBtn.style.display = '';
+            if (originalSummary) originalSummary.style.display = '';
+
         });
     }
 }
@@ -512,7 +697,6 @@ function openEditEntryModal(entryId) {
         return;
     }
 
-    // Create a modal overlay
     const modalOverlay = document.createElement('div');
     modalOverlay.classList.add('modal-overlay');
 
@@ -558,7 +742,6 @@ function openEditEntryModal(entryId) {
 
     document.body.appendChild(modalOverlay);
 
-    // Populate dropdowns in the modal
     const editClientSelect = document.getElementById('edit-client');
     const editRoomSelect = document.getElementById('edit-room');
 
@@ -577,7 +760,8 @@ function openEditEntryModal(entryId) {
     rooms.forEach(room => {
         const option = document.createElement('option');
         option.value = room.id;
-        option.textContent = `${room.name} (الدور ${room.floor})`;
+        const displayStatus = room.manualStatus || room.status; // عرض الحالة اليدوية أو التلقائية
+        option.textContent = `${room.name} (الدور ${room.floor}) - (${displayStatus === 'available' ? 'متاح' : 'مشغول'})`;
         if (room.id === entryToEdit.roomId) {
             option.selected = true;
         }
@@ -585,7 +769,6 @@ function openEditEntryModal(entryId) {
     });
 
 
-    // Handle form submission inside modal
     document.getElementById('edit-entry-form').addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -605,10 +788,8 @@ function openEditEntryModal(entryId) {
         const updatedClientName = clients.find(c => c.id === updatedClientId)?.name;
         const updatedRoomName = rooms.find(r => r.id === updatedRoomId)?.name;
 
-        // Find the original entry to get old room and bags for capacity correction
         const originalEntry = entries.find(entry => entry.id === entryId);
-        const oldRoomId = originalEntry.roomId;
-        const oldBags = originalEntry.bags;
+        const oldRoomId = originalEntry.roomId; // العنبر القديم قبل التعديل
 
         StorageHelper.update('entries', (allEntries) => {
             return allEntries.map(entry => {
@@ -630,31 +811,24 @@ function openEditEntryModal(entryId) {
             });
         });
 
-        // Update room capacities if room or bags changed
-        if (oldRoomId !== updatedRoomId || oldBags !== updatedBags) {
-            StorageHelper.update('rooms', (allRooms) => {
-                return allRooms.map(room => {
-                    if (room.id === oldRoomId) { // Decrease old room capacity
-                        return { ...room, capacity: room.capacity - oldBags };
-                    }
-                    if (room.id === updatedRoomId) { // Increase new room capacity
-                        return { ...room, capacity: room.capacity + updatedBags, status: 'occupied' };
-                    }
-                    return room;
-                }).map(room => {
-                    // Check if old room is now empty and set status to available
-                    if (room.id === oldRoomId && room.capacity <= 0) {
-                        return { ...room, status: 'available', capacity: 0 };
-                    }
-                    return room;
-                });
-            });
+        // إعادة حساب سعة العنبر القديم والعنبر الجديد إذا تم تغيير العنبر
+        if (oldRoomId !== updatedRoomId) {
+            updateRoomCapacity(oldRoomId);
+            updateRoomCapacity(updatedRoomId);
+        } else {
+            // فقط تحديث سعة العنبر إذا تغيرت عدد الشكاير أو الوزن
+            if (originalEntry.bags !== updatedBags || originalEntry.weight !== updatedWeight) {
+                updateRoomCapacity(updatedRoomId);
+            }
         }
-
 
         modalOverlay.remove();
         alert('تم تحديث الإدخال بنجاح!');
-        renderReportTable(); // Re-render table to reflect changes
+        renderReportTable();
+        renderDashboardStats();
+        if (document.getElementById('rooms-grid')) {
+            renderRoomsStatusGrid();
+        }
     });
 
     document.getElementById('cancel-edit-entry').addEventListener('click', () => {
@@ -669,37 +843,29 @@ function deleteEntry(entryId) {
 
         if (entryToDelete) {
             const roomId = entryToDelete.roomId;
-            const bagsToDelete = entryToDelete.bags;
 
             StorageHelper.update('entries', (allEntries) => allEntries.filter(entry => entry.id !== entryId));
 
-            // Decrease room capacity and potentially change status
-            StorageHelper.update('rooms', (allRooms) => {
-                return allRooms.map(room => {
-                    if (room.id === roomId) {
-                        const newCapacity = room.capacity - bagsToDelete;
-                        return {
-                            ...room,
-                            capacity: Math.max(0, newCapacity), // Capacity cannot go below 0
-                            status: newCapacity <= 0 ? 'available' : room.status // Change to available if empty
-                        };
-                    }
-                    return room;
-                });
-            });
+            // إعادة حساب سعة العنبر المتأثر
+            updateRoomCapacity(roomId);
+
             alert('تم حذف الإدخال بنجاح!');
             renderReportTable();
+            renderDashboardStats();
+            if (document.getElementById('rooms-grid')) {
+                renderRoomsStatusGrid();
+            }
         }
     }
 }
-
 
 // ==================== وظائف حالة العنابر (rooms-status.html) ====================
 function renderRoomsStatusGrid() {
     const roomsGrid = document.getElementById('rooms-grid');
     const floorFilter = document.getElementById('floor-filter');
     const statusFilter = document.getElementById('status-filter');
-    if (!roomsGrid) return; // Exit if not on rooms-status page
+
+    if (!roomsGrid) return;
 
     const rooms = StorageHelper.get('rooms');
 
@@ -714,7 +880,8 @@ function renderRoomsStatusGrid() {
             filteredRooms = filteredRooms.filter(room => room.floor === selectedFloor);
         }
         if (selectedStatus) {
-            filteredRooms = filteredRooms.filter(room => room.status === selectedStatus);
+            // تصفية بناءً على manualStatus إذا كانت موجودة، وإلا فاستخدم status التلقائي
+            filteredRooms = filteredRooms.filter(room => (room.manualStatus || room.status) === selectedStatus);
         }
 
         if (filteredRooms.length === 0) {
@@ -722,8 +889,8 @@ function renderRoomsStatusGrid() {
             return;
         }
 
+        // فرز العنابر حسب الدور ثم الاسم
         filteredRooms.sort((a, b) => {
-            // Sort by floor, then by room name
             if (a.floor !== b.floor) {
                 return parseInt(a.floor) - parseInt(b.floor);
             }
@@ -731,134 +898,270 @@ function renderRoomsStatusGrid() {
         });
 
         filteredRooms.forEach(room => {
+            // استخدم manualStatus للعرض إذا كانت موجودة، وإلا فاستخدم status التلقائي
+            const displayStatus = room.manualStatus || room.status;
+
             const roomCard = document.createElement('div');
-            roomCard.classList.add('room-card', room.status);
-            roomCard.dataset.roomId = room.id;
-            roomCard.onclick = () => window.location.href = `room-division.html?id=${room.id}`;
+            roomCard.classList.add('room-card', displayStatus); // أضف الكلاس المناسب للحالة (available/occupied)
+            roomCard.dataset.roomId = room.id; // لتحديد العنبر عند النقر
 
             roomCard.innerHTML = `
                 <h3>${room.name}</h3>
                 <p>الدور: ${room.floor}</p>
                 <p>الشكاير: ${room.capacity || 0}</p>
-                <span class="status">${room.status === 'available' ? 'متاح' : 'مشغول'}</span>
+                <p>الأطنان: ${room.totalWeight ? room.totalWeight.toFixed(2) : 0}</p>
+                <button class="toggle-status-btn btn-${displayStatus === 'available' ? 'success' : 'danger'}" data-room-id="${room.id}">
+                    <i class="fas fa-${displayStatus === 'available' ? 'check-circle' : 'times-circle'}"></i> 
+                    ${displayStatus === 'available' ? 'تحديد كمشغول' : 'تحديد كمتاح'}
+                </button>
             `;
             roomsGrid.appendChild(roomCard);
         });
+
+        // إضافة مستمعي الأحداث لأزرار تبديل الحالة بعد إضافة البطاقات
+        document.querySelectorAll('.toggle-status-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const roomId = event.currentTarget.dataset.roomId;
+                toggleRoomManualStatus(roomId);
+            });
+        });
     };
 
-    // Attach event listeners
+    // استمع لتغييرات الفلاتر لتحديث العرض
     if (floorFilter) floorFilter.addEventListener('change', applyFilters);
     if (statusFilter) statusFilter.addEventListener('change', applyFilters);
 
-    // Initial render
-    applyFilters();
+    applyFilters(); // طبق الفلاتر عند تحميل الصفحة لأول مرة
 }
 
-// ==================== وظائف تقسيم العنابر (room-division.html) ====================
-function setupRoomDivisionPage() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomId = urlParams.get('id');
+// ==================== وظيفة تحديث سعة العنبر والوزن الكلي (تلقائيًا من الإدخالات) ====================
+function updateRoomCapacity(roomId) {
+    const entries = StorageHelper.get('entries');
 
-    if (!roomId) {
-        alert('لم يتم تحديد رقم العنبر.');
-        window.location.href = 'rooms-status.html'; // Redirect if no room ID
-        return;
+    const roomEntries = entries.filter(entry => entry.roomId === roomId);
+
+    // حساب إجمالي عدد الشكاير لهذا العنبر
+    const totalBags = roomEntries.reduce((sum, entry) => sum + entry.bags, 0);
+
+    // حساب إجمالي الوزن لهذا العنبر
+    const totalWeight = roomEntries.reduce((sum, entry) => sum + entry.weight, 0);
+
+    StorageHelper.update('rooms', (rooms) =>
+        rooms.map(room => {
+            if (room.id === roomId) {
+                return {
+                    ...room,
+                    capacity: totalBags,
+                    totalWeight: totalWeight, // حفظ الوزن الكلي
+                    status: totalBags > 0 ? 'occupied' : 'available' // الحالة التلقائية بناءً على الشكاير
+                };
+            }
+            return room;
+        })
+    );
+    // تحديث شبكة العنابر لتعكس التغييرات إذا كنا في صفحة حالة العنابر
+    if (document.getElementById('rooms-grid')) {
+        renderRoomsStatusGrid();
     }
+    // تحديث جدول العنابر في صفحة إضافة العنابر (إن وجدت)
+    if (document.getElementById('rooms-table')) {
+        renderAddRoomsTable();
+    }
+    // تحديث قائمة العنابر في تقسيم اللواطات (إن وجدت)
+    if (document.getElementById('rooms-list')) {
+        renderRoomsList();
+    }
+}
 
+// ==================== وظيفة تبديل الحالة اليدوية للعنبر ====================
+function toggleRoomManualStatus(roomId) {
+    StorageHelper.update('rooms', (rooms) =>
+        rooms.map(room => {
+            if (room.id === roomId) {
+                // تبديل manualStatus
+                const currentManualStatus = room.manualStatus || room.status; // استخدم manualStatus إن وجدت، وإلا الحالة التلقائية
+                const newManualStatus = currentManualStatus === 'available' ? 'occupied' : 'available';
+                return {
+                    ...room,
+                    manualStatus: newManualStatus // تحديث الحالة اليدوية
+                };
+            }
+            return room;
+        })
+    );
+    // بعد التحديث، أعد عرض الشبكة لتعكس التغيير
+    renderRoomsStatusGrid();
+    alert('تم تغيير حالة العنبر يدويًا بنجاح!');
+}
+
+
+// ==================== وظائف تقسيم العنابر إلى لواطات (room-division.html) ====================
+// ملاحظة: هذه الوظائف منفصلة عن نظام الإدخالات (entry.html) وتحسب السعة بشكل مختلف
+let currentRoomId = null; // لتتبع العنبر الحالي الذي يتم تقسيم لوياته
+
+function renderRoomDivisionPage() {
+    const roomsListDiv = document.getElementById('rooms-list');
+    const lotsSection = document.getElementById('lots-section');
+
+    if (!roomsListDiv || !lotsSection) return; // تأكد أننا في الصفحة الصحيحة
+
+    // إخفاء قسم اللواطات مبدئياً
+    lotsSection.style.display = 'none';
+    renderRoomsList();
+}
+
+function renderRoomsList() {
+    const roomsListDiv = document.getElementById('rooms-list');
+    if (!roomsListDiv) return;
+
+    roomsListDiv.innerHTML = '<h3><i class="fas fa-boxes"></i> اختر عنبرًا لتقسيمه:</h3>';
     const rooms = StorageHelper.get('rooms');
-    const currentRoom = rooms.find(room => room.id === roomId);
-
-    if (!currentRoom) {
-        alert('العنبر غير موجود.');
-        window.location.href = 'rooms-status.html';
+    
+    if (rooms.length === 0) {
+        roomsListDiv.innerHTML += '<p class="no-results">لا توجد عنابر مضافة بعد.</p>';
         return;
     }
 
-    document.getElementById('room-name-display').textContent = currentRoom.name;
-    document.getElementById('room-floor-display').textContent = currentRoom.floor;
-    document.getElementById('room-status-display').textContent = currentRoom.status === 'available' ? 'متاح' : 'مشغول';
-    document.getElementById('room-capacity-display').textContent = currentRoom.capacity || 0;
+    const ul = document.createElement('ul');
+    ul.classList.add('room-selection-list');
+    rooms.forEach(room => {
+        const li = document.createElement('li');
+        const displayStatus = room.manualStatus || room.status;
+        li.innerHTML = `
+            <span>${room.name} (الدور ${room.floor}) - ${room.capacity || 0} شيكارة - ${room.totalWeight ? room.totalWeight.toFixed(2) : 0} طن (${displayStatus === 'available' ? 'متاح' : 'مشغول'})</span>
+            <button class="btn-primary btn-small" data-room-id="${room.id}">عرض اللواطات</button>
+        `;
+        li.querySelector('button').addEventListener('click', () => showLotsForRoom(room.id, room.name));
+        ul.appendChild(li);
+    });
+    roomsListDiv.appendChild(ul);
+}
 
-    renderRoomLots(roomId);
-    setupAddLotForm(roomId);
+function showLotsForRoom(roomId, roomName) {
+    currentRoomId = roomId;
+    const lotsSection = document.getElementById('lots-section');
+    const currentRoomNameSpan = document.getElementById('current-room-name');
+    const backToRoomsBtn = document.getElementById('back-to-rooms-btn');
+
+    if (lotsSection && currentRoomNameSpan && backToRoomsBtn) {
+        currentRoomNameSpan.textContent = roomName;
+        lotsSection.style.display = 'block';
+        document.getElementById('rooms-list').style.display = 'none'; // إخفاء قائمة العنابر
+
+        renderRoomLots(roomId);
+
+        backToRoomsBtn.onclick = () => {
+            lotsSection.style.display = 'none';
+            document.getElementById('rooms-list').style.display = 'block';
+            currentRoomId = null;
+            renderRoomsList(); // إعادة عرض قائمة العنابر
+        };
+    }
 }
 
 function renderRoomLots(roomId) {
     const lotsList = document.getElementById('lots-list');
-    if (!lotsList) return;
+    const addLotForm = document.getElementById('add-lot-form');
+    if (!lotsList || !addLotForm) return;
 
     lotsList.innerHTML = '';
     const roomLots = StorageHelper.get('roomLots');
     const lots = roomLots[roomId] || [];
 
     if (lots.length === 0) {
-        lotsList.innerHTML = '<tr><td colspan="3">لا توجد لواطات لهذا العنبر بعد.</td></tr>';
+        // إذا لم يكن هناك لواطات، اعرض رسالة في صف واحد
+        const row = lotsList.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 3; // دمج الخلايا لتغطية عرض الجدول
+        cell.style.textAlign = 'center';
+        cell.textContent = 'لا توجد لواطات لهذا العنبر بعد.';
+    } else {
+        lots.forEach(lot => {
+            const row = lotsList.insertRow();
+            row.insertCell().textContent = lot.number;
+            row.insertCell().textContent = lot.bags;
+            const actionsCell = row.insertCell();
+
+            const editButton = document.createElement('button');
+            editButton.innerHTML = '<i class="fas fa-edit"></i> تعديل';
+            editButton.classList.add('btn-primary', 'btn-small');
+            editButton.onclick = () => openEditLotModal(roomId, lot.id);
+            actionsCell.appendChild(editButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.innerHTML = '<i class="fas fa-trash"></i> حذف';
+            deleteButton.classList.add('btn-danger', 'btn-small');
+            deleteButton.onclick = () => deleteLot(roomId, lot.id);
+            actionsCell.appendChild(deleteButton);
+        });
+    }
+
+    // إضافة مستمع حدث الحفظ للوط
+    addLotForm.onsubmit = function(e) {
+        e.preventDefault();
+        addLot(roomId);
+    };
+}
+
+function addLot(roomId) {
+    const lotNumberInput = document.getElementById('lot-number');
+    const lotBagsInput = document.getElementById('lot-bags');
+
+    const lotNumber = lotNumberInput.value.trim();
+    const lotBags = parseInt(lotBagsInput.value);
+
+    if (!lotNumber || isNaN(lotBags) || lotBags <= 0) {
+        alert('الرجاء إدخال رقم اللوط وعدد الشكاير بشكل صحيح.');
         return;
     }
 
-    lots.forEach(lot => {
-        const row = lotsList.insertRow();
-        row.insertCell().textContent = lot.number;
-        row.insertCell().textContent = lot.bags;
+    const roomLots = StorageHelper.get('roomLots');
+    const lots = roomLots[roomId] || [];
 
-        const actionsCell = row.insertCell();
-        const editButton = document.createElement('button');
-        editButton.innerHTML = '<i class="fas fa-edit"></i> تعديل';
-        editButton.classList.add('btn-primary', 'btn-small');
-        editButton.onclick = () => openEditLotModal(roomId, lot.id);
-        actionsCell.appendChild(editButton);
+    // التحقق من تكرار رقم اللوط
+    if (lots.some(lot => lot.number === lotNumber)) {
+        alert('هذا اللوط موجود بالفعل في هذا العنبر.');
+        return;
+    }
 
-        const deleteButton = document.createElement('button');
-        deleteButton.innerHTML = '<i class="fas fa-trash"></i> حذف';
-        deleteButton.classList.add('btn-danger', 'btn-small');
-        deleteButton.onclick = () => deleteLot(roomId, lot.id);
-        actionsCell.appendChild(deleteButton);
-    });
+    const newLot = {
+        id: Date.now().toString(), // معرف فريد للوط
+        number: lotNumber,
+        bags: lotBags
+    };
+
+    lots.push(newLot);
+    roomLots[roomId] = lots; // تحديث قائمة اللواطات لهذا العنبر
+    StorageHelper.set('roomLots', roomLots);
+
+    // تحديث سعة العنبر بناءً على اللواطات (هذه الوظيفة منفصلة عن سعة الإدخال)
+    updateRoomCapacityFromLots(roomId);
+
+    alert('تم إضافة اللوط بنجاح!');
+    lotNumberInput.value = ''; // مسح حقل رقم اللوط
+    lotBagsInput.value = '';   // مسح حقل عدد الشكاير
+    renderRoomLots(roomId);
+    renderRoomsList(); // لتحديث عرض السعة في قائمة العنابر الرئيسية (صفحة التقسيم)
 }
 
-function setupAddLotForm(roomId) {
-    const addLotForm = document.getElementById('add-lot-form');
-    if (addLotForm) {
-        addLotForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const lotNumber = parseInt(document.getElementById('lot-number').value);
-            const lotBags = parseInt(document.getElementById('lot-bags').value);
-
-            if (isNaN(lotNumber) || lotNumber <= 0 || isNaN(lotBags) || lotBags <= 0) {
-                alert('الرجاء إدخال رقم اللوط وعدد الشكاير بشكل صحيح.');
-                return;
+function deleteLot(roomId, lotId) {
+    if (confirm('هل أنت متأكد أنك تريد حذف هذا اللوط؟')) {
+        StorageHelper.update('roomLots', (roomLots) => {
+            if (roomLots[roomId]) {
+                roomLots[roomId] = roomLots[roomId].filter(lot => lot.id !== lotId);
             }
-
-            const roomLots = StorageHelper.get('roomLots');
-            const currentLots = roomLots[roomId] || [];
-
-            // Check for duplicate lot number
-            if (currentLots.some(lot => lot.number === lotNumber)) {
-                alert('رقم اللوط هذا موجود بالفعل في العنبر. الرجاء إدخال رقم مختلف.');
-                return;
-            }
-
-            const newLot = {
-                id: Date.now().toString(),
-                number: lotNumber,
-                bags: lotBags
-            };
-
-            currentLots.push(newLot);
-            roomLots[roomId] = currentLots;
-            StorageHelper.set('roomLots', roomLots);
-
-            updateRoomCapacity(roomId); // Update room's total capacity
-            renderRoomLots(roomId); // Re-render lots table
-            addLotForm.reset();
-            alert('تم إضافة اللوط بنجاح!');
+            updateRoomCapacityFromLots(roomId); // إعادة حساب سعة العنبر بعد الحذف
+            return roomLots;
         });
+        alert('تم حذف اللوط بنجاح!');
+        renderRoomLots(roomId);
+        renderRoomsList(); // لتحديث عرض السعة في قائمة العنابر الرئيسية (صفحة التقسيم)
     }
 }
 
-function openEditLotModal(currentRoomId, lotId) {
+function openEditLotModal(roomId, lotId) {
     const roomLots = StorageHelper.get('roomLots');
-    const lots = roomLots[currentRoomId] || [];
+    const lots = roomLots[roomId] || [];
     const lotToEdit = lots.find(lot => lot.id === lotId);
 
     if (!lotToEdit) {
@@ -875,7 +1178,7 @@ function openEditLotModal(currentRoomId, lotId) {
             <form id="edit-lot-form">
                 <div class="form-group">
                     <label for="edit-lot-number">رقم اللوط:</label>
-                    <input type="number" id="edit-lot-number" min="1" value="${lotToEdit.number}" required>
+                    <input type="text" id="edit-lot-number" value="${lotToEdit.number}" required>
                 </div>
                 <div class="form-group">
                     <label for="edit-lot-bags">عدد الشكاير:</label>
@@ -894,128 +1197,126 @@ function openEditLotModal(currentRoomId, lotId) {
     document.getElementById('edit-lot-form').addEventListener('submit', function(e) {
         e.preventDefault();
 
-        const updatedLotNumber = parseInt(document.getElementById('edit-lot-number').value);
+        const updatedLotNumber = document.getElementById('edit-lot-number').value.trim();
         const updatedLotBags = parseInt(document.getElementById('edit-lot-bags').value);
 
-        if (isNaN(updatedLotNumber) || updatedLotNumber <= 0 || isNaN(updatedLotBags) || updatedLotBags <= 0) {
+        if (!updatedLotNumber || isNaN(updatedLotBags) || updatedLotBags <= 0) {
             alert('الرجاء إدخال رقم اللوط وعدد الشكاير بشكل صحيح.');
             return;
         }
 
-        // Check for duplicate lot number, excluding the current lot being edited
+        // التحقق من تكرار رقم اللوط الجديد (باستثناء اللوط الحالي نفسه)
         if (lots.some(lot => lot.number === updatedLotNumber && lot.id !== lotId)) {
-            alert('رقم اللوط هذا موجود بالفعل في العنبر. الرجاء إدخال رقم مختلف.');
+            alert('هذا اللوط موجود بالفعل في هذا العنبر.');
             return;
         }
 
         StorageHelper.update('roomLots', (allRoomLots) => {
-            allRoomLots[currentRoomId] = (allRoomLots[currentRoomId] || []).map(lot =>
-                lot.id === lotId ? { ...lot, number: updatedLotNumber, bags: updatedLotBags } : lot
-            );
+            if (allRoomLots[roomId]) {
+                allRoomLots[roomId] = allRoomLots[roomId].map(lot =>
+                    lot.id === lotId ? { ...lot, number: updatedLotNumber, bags: updatedLotBags } : lot
+                );
+            }
+            updateRoomCapacityFromLots(roomId); // تحديث سعة العنبر بعد التعديل
             return allRoomLots;
         });
 
-        updateRoomCapacity(currentRoomId);
         modalOverlay.remove();
-        renderRoomLots(currentRoomId);
-        alert('تم تحديث اللوط بنجاح');
+        alert('تم تحديث اللوط بنجاح!');
+        renderRoomLots(roomId);
+        renderRoomsList(); // لتحديث عرض السعة في قائمة العنابر الرئيسية (صفحة التقسيم)
     });
 
-    document.getElementById('cancel-edit-lot').addEventListener('click', () =>
-        modalOverlay.remove()
-    );
+    document.getElementById('cancel-edit-lot').addEventListener('click', () => {
+        modalOverlay.remove();
+    });
 }
 
+// وظيفة منفصلة لحساب السعة والوزن بناءً على اللواطات (لصفحة تقسيم العنابر)
+function updateRoomCapacityFromLots(roomId) {
+    const roomLots = StorageHelper.get('roomLots');
+    const lots = roomLots[roomId] || [];
 
-function deleteLot(roomId, lotId) {
-    if (confirm('هل أنت متأكد أنك تريد حذف هذا اللوط؟')) {
-        StorageHelper.update('roomLots', (roomLots) => {
-            roomLots[roomId] = (roomLots[roomId] || []).filter(lot => lot.id !== lotId);
-            return roomLots;
-        });
-        updateRoomCapacity(roomId); // Recalculate room capacity
-        renderRoomLots(roomId);
-        alert('تم حذف اللوط بنجاح!');
-    }
-}
+    const totalBagsFromLots = lots.reduce((sum, lot) => sum + lot.bags, 0);
 
-function updateRoomCapacity(roomId) {
-    const totalBags = StorageHelper.get('roomLots')[roomId]?.reduce(
-        (sum, lot) => sum + lot.bags, 0
-    ) || 0;
+    // افتراض: متوسط وزن الشيكارة 50 كجم = 0.05 طن (يمكنك تعديل هذا الافتراض أو جعله مدخلًا)
+    const assumedWeightPerBagTon = 0.05; // على سبيل المثال، 50 كجم = 0.05 طن
+    const totalWeightFromLots = totalBagsFromLots * assumedWeightPerBagTon;
 
     StorageHelper.update('rooms', (rooms) =>
-        rooms.map(room =>
-            room.id === roomId ? {
-                ...room,
-                capacity: totalBags,
-                status: totalBags > 0 ? 'occupied' : 'available'
-            } : room
-        )
-    );
-
-    // If on room-division page, update display
-    const roomCapacityDisplay = document.getElementById('room-capacity-display');
-    const roomStatusDisplay = document.getElementById('room-status-display');
-    if (roomCapacityDisplay) {
-        roomCapacityDisplay.textContent = totalBags;
-    }
-    if (roomStatusDisplay) {
-        roomStatusDisplay.textContent = totalBags > 0 ? 'مشغول' : 'متاح';
-    }
-}
-
-
-// ==================== زر مسح البيانات ====================
-function setupClearDataButton() {
-    const clearDataBtn = document.getElementById('clear-data-btn');
-    if (clearDataBtn) {
-        clearDataBtn.addEventListener('click', () => {
-            if (confirm('هل أنت متأكد أنك تريد مسح جميع البيانات (العنابر، العملاء، الإدخالات، اللواطات)؟ هذا الإجراء لا يمكن التراجع عنه.')) {
-                localStorage.clear();
-                alert('تم مسح جميع البيانات بنجاح!');
-                window.location.reload(); // Reload the page to reset the application
+        rooms.map(room => {
+            if (room.id === roomId) {
+                // تحديث capacity و totalWeight فقط بناءً على اللواطات
+                // لا نغير manualStatus هنا، ولا status التلقائي المستند على إدخالات `entry.html`
+                return {
+                    ...room,
+                    capacity: totalBagsFromLots,
+                    totalWeight: totalWeightFromLots,
+                    // Note: 'status' field is managed by entries, not by lots
+                    // If you want room-division to affect status, you'd need more complex logic.
+                };
             }
-        });
+            return room;
+        })
+    );
+    // إذا كانت صفحة rooms-status مفتوحة، قم بتحديثها أيضًا (لكن ستظهر السعة من الإدخالات)
+    if (document.getElementById('rooms-grid')) {
+        renderRoomsStatusGrid();
+    }
+    // تحديث جدول العنابر في صفحة إضافة العنابر (إن وجدت)
+    if (document.getElementById('rooms-table')) {
+        renderAddRoomsTable();
     }
 }
 
-// ==================== تهيئة التطبيق عند تحميل DOM ====================
-document.addEventListener('DOMContentLoaded', function() {
-    // 1. تهيئة البيانات الأساسية في localStorage
-    initializeStorage();
 
-    // 2. تفعيل القائمة المنسدلة للشاشات الصغيرة
-    setupMobileMenu();
-
-    // 3. تمييز العنصر النشط في السايدبار
-    highlightActiveLink();
-
-    // 4. تحميل وعرض البيانات عند الحاجة (اعتمادًا على الصفحة الحالية)
-    if (document.getElementById('total-rooms')) {
-        renderDashboardStats();
+// ==================== وظائف مسح البيانات ====================
+function clearAllData() {
+    if (confirm('هل أنت متأكد أنك تريد مسح جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء!')) {
+        localStorage.clear();
+        initializeStorage(); // إعادة تهيئة التخزين بعد المسح
+        alert('تم مسح جميع البيانات بنجاح!');
+        window.location.reload(); // إعادة تحميل الصفحة لتطبيق التغييرات
     }
+}
+
+// ==================== تهيئة التطبيق عند تحميل DOM بالكامل ====================
+document.addEventListener('DOMContentLoaded', function() {
+    initializeStorage(); // تهيئة التخزين عند بدء التطبيق
+    setupMobileMenu(); // إعداد قائمة الموبايل
+    highlightActiveLink(); // تمييز الرابط النشط في السايدبار
+    renderDashboardStats(); // عرض الإحصائيات في لوحة التحكم
+
+    // استدعاء الدوال الخاصة بكل صفحة بناءً على وجود عناصرها في الـ DOM
     if (document.getElementById('add-room-form')) {
         setupAddRoomForm();
+        renderAddRoomsTable(); // استدعاء الدالة الجديدة لعرض العنابر في add-rooms.html
     }
+
     if (document.getElementById('clients-table')) {
-        setupAddClientForm(); // Setup form for adding/editing clients
         renderClientsTable();
+        setupAddClientForm();
     }
+
     if (document.getElementById('entry-form')) {
         populateEntryFormDropdowns();
         setupEntryForm();
     }
+
     if (document.getElementById('report-table')) {
-        renderReportTable(); // This function also sets up filters
-    }
-    if (document.getElementById('rooms-grid')) {
-        renderRoomsStatusGrid(); // This function also sets up filters
-    }
-    if (window.location.pathname.includes('room-division.html')) {
-        setupRoomDivisionPage();
+        renderReportTable();
     }
 
-    // 5. إعداد زر مسح البيانات (إذا كان موجودًا في الصفحة)
-    setupClearDataButton();
+    if (document.getElementById('rooms-grid')) {
+        renderRoomsStatusGrid();
+    }
+    
+    // دوال تقسيم العنابر
+    if (document.getElementById('rooms-list') && document.getElementById('lots-section')) {
+        renderRoomDivisionPage();
+    }
+
+    if (document.getElementById('clear-data-btn')) {
+        document.getElementById('clear-data-btn').addEventListener('click', clearAllData);
+    }
 });
