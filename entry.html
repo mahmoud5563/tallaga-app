@@ -10,12 +10,10 @@
 </head>
 <body>
     <header class="app-header">
-        
-</button>
+        <button class="menu-toggle">☰</button>
         <div class="logo-container">
             <h1>تلاجة الحاج أنور بكر</h1>
         </div>
-        
     </header>
 
     <nav class="sidebar">
@@ -61,40 +59,47 @@
 
     <div class="main-content">
         <div class="form-container">
-            <h2><i class="fas fa-edit"></i> إدخال بيانات التخزين</h2>
+            <h2><i class="fas fa-edit"></i> تسجيل إدخال جديد</h2>
             
             <form id="entry-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="bags-count">عدد الشكاير:</label>
-                        <input type="number" id="bags-count" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="weight">الوزن بالطن:</label>
-                        <input type="number" step="0.01" id="weight" required>
-                    </div>
+                <div class="form-group">
+                    <label for="entry-date">تاريخ الإدخال:</label>
+                    <input type="date" id="entry-date" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="number-of-bags">عدد الشكاير:</label>
+                    <input type="number" id="number-of-bags" min="1" required inputmode="numeric">
+                </div>
+                
+                <div class="form-group">
+                    <label for="weight">الوزن (طن):</label>
+                    <input type="number" id="weight" min="0.01" step="any" required inputmode="decimal">
                 </div>
                 
                 <div class="form-group">
                     <label for="client">اسم العميل:</label>
                     <select id="client" required>
                         <option value="">اختر العميل</option>
-                        <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
-                    </select>
+                        </select>
                 </div>
                 
                 <div class="form-group">
                     <label for="room">اسم العنبر:</label>
                     <select id="room" required>
                         <option value="">اختر العنبر</option>
-                        <!-- سيتم ملؤها بواسطة الجافاسكريبت -->
-                    </select>
+                        </select>
                 </div>
                 
                 <div class="form-group">
                     <label for="thread-color">لون الخيط:</label>
-                    <input type="text" id="thread-color">
+                    <select id="thread-color">
+                        <option value="">اختر لون الخيط (اختياري)</option>
+                        <option value="أحمر">أحمر</option>
+                        <option value="أبيض">أبيض</option>
+                        <option value="أخضر">أخضر</option>
+                        <option value="أصفر">أصفر</option>
+                    </select>
                 </div>
                 
                 <div class="form-group">
