@@ -101,12 +101,13 @@ function setupMobileMenu() {
 
     menuToggle.addEventListener('click', function(e) {
         e.stopPropagation();
-        sidebar.classList.toggle('active');
+        sidebar.classList.toggle('open'); // ← بدل active بـ open
     });
     
-    document.addEventListener('click', () => sidebar.classList.remove('active'));
+    document.addEventListener('click', () => sidebar.classList.remove('open')); // ← هنا كمان
     sidebar.addEventListener('click', e => e.stopPropagation());
 }
+
 
 // ==================== وظيفة مسح البيانات ====================
 function setupDataClearing() {
